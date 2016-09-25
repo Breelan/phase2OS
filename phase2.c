@@ -40,8 +40,11 @@ mailSlot MailSlotTable[MAXSLOTS];
 // the process table
 procStruct ProcTable[MAXPROC];
 
+// TODO system call vector
+
+
 // keep track of how many mailboxes are in use
-int nextMailBoxID = 1;
+// int nextMailBoxID = 0;
 
 
 
@@ -68,9 +71,19 @@ int start1(char *arg)
     // Disable interrupts
     disableInterrupts();
 
-    // Initialize the mail box table, slots, & other data structures.
-    // Initialize USLOSS_IntVec and system call handlers,
-    // allocate mailboxes for interrupt handlers.  Etc... 
+    // TODO Initialize the mail box table, slots, & other data structures.
+    // TODO set things in mailbox
+    // TODO set things in mailSlot
+
+    // TODO Initialize USLOSS_IntVec and system call handlers,
+    // set each one to nullsys
+    
+    // TODO allocate mailboxes for interrupt handlers.  Etc... 
+    // similar to sentinel - gonna have 0 slots
+    for(int i = 0; i < 8; i++) {
+      MboxCreate(0,150);  
+    }
+    
 
 
     enableInterrupts();
@@ -101,12 +114,16 @@ int start1(char *arg)
    // than MAXSLOTS messages in the system at a given time
 int MboxCreate(int slots, int slot_size)
 {
-  // check if there are empty slots in the MailBoxTable
-  if (nextMailBoxID >= 20001) {
+
+  if(slot_size > 150) {
     return -1;
   }
 
-  // initialize a spot in the MailBoxTable
+  // check if there are empty slots in the MailBoxTable, and initialize if so
+  // TODO adapt findMailBox for this
+  // if (nextMailBoxID >= 20001) {
+    // return -1;
+  // }
 
   return 0;
 } /* MboxCreate */
@@ -215,4 +232,58 @@ in *status.
 --------------------------------------------------------------*/
 int waitDevice(int type, int unit, int *status) {
   return 0;
-} /* waitDevice 
+} /* waitDevice  */
+
+/*----------------------------------------------------------------
+Name - findMailBox
+----------------------------------------------------------------*/
+// int findMailBox(int startingSpot) {
+//     int increments = 0;
+//     if (MailBoxTable[startingSpot].notEmpty) {
+//         int check = 0;
+//         startingSpot = (startingSpot + 1) % MAXPROC;
+//         increments++;
+//         while(check < 50) {
+//             if (DEBUG && debugflag) printf("MailBoxTable is: %d\n", MailBoxTable[startingSpot].notEmpty);
+//             if (!MailBoxTable[startingSpot].notEmpty) {
+//                 if (DEBUG && debugflag) printf("Went through the if \n");
+//                 *(slotsIncrement) = increments;
+//                 if (DEBUG && debugflag) printf("slotsIncrement: %d \n", *(slotsIncrement));
+//                 return startingSpot;
+//             }
+//             if (DEBUG && debugflag) printf("outside the if \n");
+//             startingSpot = (startingSpot + 1) % MAXPROC;
+//             increments++;
+//             check++;
+//         }
+//         // return -1 if no spots in the process table
+//         if(startingSpot == -1){
+//             *(slotsIncrement) = increments;
+//             if (DEBUG && debugflag) printf("slotsIncrement: %d \n", *(slotsIncrement));
+//             return -1;
+//         }
+//     }
+//     *(slotsIncrement) = increments;
+//     if (DEBUG && debugflag) printf("slotsIncrement: %d \n", *(slotsIncrement));
+//     return startingSpot;
+// }
+int findMailBox(int startingSpot) {
+      if (MailBoxTable[startingSpot].notEmpty) {
+        int check = 0;
+        startingSpot = (startingSpot + 1) % MAXPROC;
+        while(check < 50) {
+           if (!MailBoxTable[startingSpot].notEmpty) {
+            return startingSpot;
+           }
+           else {
+              startingSpot = (startingSpot + 1) % MAXPROC;
+              check++;
+           }
+        }
+        // return -1 if no spots in the process table
+        if(startingSpot == -1)
+          return -1;
+    }
+
+    return startingSpot;
+}
