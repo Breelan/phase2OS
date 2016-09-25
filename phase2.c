@@ -204,4 +204,4 @@ in *status.
 --------------------------------------------------------------*/
 int waitDevice(int type, int unit, int *status) {
   return 0;
-} /* waitDevice 
+} /* waitDevice */
