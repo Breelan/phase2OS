@@ -37,6 +37,12 @@ mailbox MailBoxTable[MAXMBOX];
 // handlers, ...
 mailSlot MailSlotTable[MAXSLOTS];
 
+// the process table
+procStruct ProcTable[MAXPROC];
+
+// keep track of how many mailboxes are in use
+int nextMailBoxID = 1;
+
 
 
 /* -------------------------- Functions ----------------------------------- */
@@ -95,7 +101,12 @@ int start1(char *arg)
    // than MAXSLOTS messages in the system at a given time
 int MboxCreate(int slots, int slot_size)
 {
-  
+  // check if there are empty slots in the MailBoxTable
+  if (nextMailBoxID >= 20001) {
+    return -1;
+  }
+
+  // initialize a spot in the MailBoxTable
 
   return 0;
 } /* MboxCreate */
