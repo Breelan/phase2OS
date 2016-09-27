@@ -8,9 +8,9 @@
 // Maximum line length. Used by terminal read and write.
 #define MAXLINE         80
 
-#define MAXMBOX         2000
-#define MAXSLOTS        2500
-#define MAX_MESSAGE     150  // largest possible message in a single slot
+#define MAXMBOX         2000	// max number of mailboxes
+#define MAXSLOTS        2500	// max number of mail slots at one time
+#define MAX_MESSAGE     150		// largest possible message in a single slot
 
 // returns id of mailbox, or -1 if no more mailboxes, -2 if invalid args
 extern int MboxCreate(int slots, int slot_size);
