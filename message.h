@@ -49,16 +49,22 @@ struct mailbox {
     // other items as needed...
     
     slotPtr   slotList;         // pointer to slots
-    int       numSlots;
+    int       numSlots;         // number of slots this mailbox can use
+    int       slotSize;         // max size of message this mailbox can send/receive
+    int       usedSlots;        // number of slots already in use
     procPtr   waitingToSend;    // pointer to processes waiting to send
-    procPtr   waitingToReceive;  // pointer to processes waiting to receive
-    int       isReleased; // 1 if it is, 0 if not
+    procPtr   waitingToReceive; // pointer to processes waiting to receive
+    int       isReleased;       // 1 if this mailbox is available, 0 if not
 };
 
 struct mailSlot {
     int       mboxID;
     int       status;
     // other items as needed...
+    void      *message;   // the message the slot contains
+    int       msgSize;    // the size of the message in the slot
+    int       isReleased;
+    slotPtr   nextSlot;   // the pointer to the next slot in the mailbox
 };
 
 struct psrBits {
@@ -76,8 +82,8 @@ union psrValues {
 
 // TODO define system call vector
 
-
-
+#define     NOT_RELEASED 0
+#define     RELEASED 1
 
 
 #define     EMPTY 0
