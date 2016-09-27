@@ -125,6 +125,8 @@ int MboxCreate(int slots, int slot_size)
     // return -1;
   // }
 
+  
+
   return 0;
 } /* MboxCreate */
 
@@ -268,11 +270,11 @@ Name - findMailBox
 //     return startingSpot;
 // }
 int findMailBox(int startingSpot) {
-      if (MailBoxTable[startingSpot].notEmpty) {
+      if (!MailBoxTable[startingSpot].isReleased) {
         int check = 0;
         startingSpot = (startingSpot + 1) % MAXPROC;
-        while(check < 50) {
-           if (!MailBoxTable[startingSpot].notEmpty) {
+        while(check < MAXMBOX) {
+           if (MailBoxTable[startingSpot].isReleased) {
             return startingSpot;
            }
            else {
