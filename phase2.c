@@ -1,6 +1,5 @@
 /*------------------------------------------------------------------------
 phase2.c
-
 University of Arizona
 Computer Science 452
 Fall 2016
@@ -13,6 +12,7 @@ Phase 2
 #include <phase2.h>
 #include <usloss.h>
 #include <stdlib.h>
+
 #include "message.h"
 
 /* ------------------------- Prototypes ----------------------------------- */
@@ -23,7 +23,6 @@ void check_kernel_mode(char *);
 void disableInterrupts(void);
 void enableInterrupts(void);
 int waitDevice(int, int, int *);
-int findNextMailBox(void);
 
 
 /* -------------------------- Globals ------------------------------------- */
@@ -36,6 +35,15 @@ mailbox MailBoxTable[MAXMBOX];
 // also need array of mail slots, array of function ptrs to system call 
 // handlers, ...
 mailSlot MailSlotTable[MAXSLOTS];
+
+// the process table
+procStruct ProcTable[MAXPROC];
+
+// TODO system call vector
+
+
+// keep track of how many mailboxes are in use
+// int nextMailBoxID = 0;
 
 
 
@@ -52,40 +60,43 @@ mailSlot MailSlotTable[MAXSLOTS];
 int start1(char *arg)
 {
 
-  int kid_pid, status;
+    int kid_pid, status;
 
-  if (DEBUG2 && debugflag2)
-    USLOSS_Console("start1(): at beginning\n");
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("start1(): at beginning\n");
 
-check_kernel_mode("start1");
+    check_kernel_mode("start1");
 
     // Disable interrupts
-disableInterrupts();
+    disableInterrupts();
 
-    // Initialize the mail box table, slots, & other data structures.
-    int i;
-    for (i = 0; i < MAXMBOX; i++){
-        MailBoxTable[i].id = i;
-        MailBoxTable[i].isReleased = 1;
+    // TODO Initialize the mail box table, slots, & other data structures.
+    // TODO set things in mailbox
+    // TODO set things in mailSlot
+
+    // TODO Initialize USLOSS_IntVec and system call handlers,
+    // set each one to nullsys
+    
+    // TODO allocate mailboxes for interrupt handlers.  Etc... 
+    // similar to sentinel - gonna have 0 slots
+    for(int i = 0; i < 8; i++) {
+      MboxCreate(0,150);  
     }
-
-    // Initialize USLOSS_IntVec and system call handlers,
-
-    // allocate mailboxes for interrupt handlers.  Etc... 
+    
 
 
-enableInterrupts();
+    enableInterrupts();
 
     // Create a process for start2, then block on a join until start2 quits
-if (DEBUG2 && debugflag2)
-    USLOSS_Console("start1(): fork'ing start2 process\n");
-kid_pid = fork1("start2", start2, NULL, 4 * USLOSS_MIN_STACK, 1);
-if ( join(&status) != kid_pid ) {
-    USLOSS_Console("start2(): join returned something other than ");
-    USLOSS_Console("start2's pid\n");
-}
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("start1(): fork'ing start2 process\n");
+    kid_pid = fork1("start2", start2, NULL, 4 * USLOSS_MIN_STACK, 1);
+    if ( join(&status) != kid_pid ) {
+        USLOSS_Console("start2(): join returned something other than ");
+        USLOSS_Console("start2's pid\n");
+    }
 
-return 0;
+    return 0;
 } /* start1 */
 
 
@@ -103,8 +114,17 @@ return 0;
 int MboxCreate(int slots, int slot_size)
 {
 
+  if(slot_size > 150) {
+    return -1;
+  }
 
-    return 0;
+  // check if there are empty slots in the MailBoxTable, and initialize if so
+  // TODO adapt findMailBox for this
+  // if (nextMailBoxID >= 20001) {
+    // return -1;
+  // }
+
+  return 0;
 } /* MboxCreate */
 
 
@@ -116,10 +136,10 @@ int MboxCreate(int slots, int slot_size)
    Returns - zero if successful, -1 if invalid args.
    Side Effects - none.
    ----------------------------------------------------------------------- */
-    int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
-    {
-      return 0;
-    }/* MboxSend */
+int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
+{
+  return 0;
+} /* MboxSend */
 
 
 /* ------------------------------------------------------------------------
@@ -131,32 +151,32 @@ int MboxCreate(int slots, int slot_size)
    Returns - actual size of msg if successful, -1 if invalid args.
    Side Effects - none.
    ----------------------------------------------------------------------- */
-      int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
-      {
-        return 0;
-      } /* MboxReceive */
+int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
+{
+  return 0;
+} /* MboxReceive */
 
 
 // test if in kernel mode; halt if in user mode
-        void check_kernel_mode(char *name) {
-
-          if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0) {
+void check_kernel_mode(char *name) {
+    
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0) {
         // output an error message
-            USLOSS_Console("fork1(): called while in user mode, by process %d. Halting...\n", getpid());
-            USLOSS_Halt(1);
-        }
-
+        USLOSS_Console("fork1(): called while in user mode, by process %d. Halting...\n", getpid());
+        USLOSS_Halt(1);
     }
+
+}
 
 
 /*--------------------------------------------------------------
 Name - disableInterrupts()
 Purpose - Disables the interrupts.
 --------------------------------------------------------------*/
-    void disableInterrupts()
-    {
+void disableInterrupts()
+{
     // turn the interrupts OFF if we are in kernel mode
-      if( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
+    if( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
         //not in kernel mode
         if (DEBUG2 && debugflag2) USLOSS_Console("Kernel Error: Not in kernel mode, may not ");
         if (DEBUG2 && debugflag2) USLOSS_Console("disable interrupts\n");
@@ -171,18 +191,18 @@ Purpose - Disables the interrupts.
 Name - enableInterrupts()
 Purpose - Enables the interrupts
 ------------------------------------------------------*/
-    void enableInterrupts(){
-        unsigned int num = 0x02;
+void enableInterrupts(){
+    unsigned int num = 0x02;
     // turn the interrupts ON if we are in kernel mode
-        if( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
+    if( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
         //not in kernel mode
-          if (DEBUG2 && debugflag2) USLOSS_Console("Kernel Error: Not in kernel mode, may not ");
-          if (DEBUG2 && debugflag2) USLOSS_Console("disable interrupts\n");
-          USLOSS_Halt(1);
-      } else {
-          USLOSS_PsrSet(USLOSS_PsrGet() + num);
-      }
-      if (DEBUG2 && debugflag2) USLOSS_Console("interrupt mode is %d\n", USLOSS_PsrGet() & USLOSS_PSR_CURRENT_INT);
+        if (DEBUG2 && debugflag2) USLOSS_Console("Kernel Error: Not in kernel mode, may not ");
+        if (DEBUG2 && debugflag2) USLOSS_Console("disable interrupts\n");
+        USLOSS_Halt(1);
+    } else {
+        USLOSS_PsrSet(USLOSS_PsrGet() + num);
+    }
+    if (DEBUG2 && debugflag2) USLOSS_Console("interrupt mode is %d\n", USLOSS_PsrGet() & USLOSS_PSR_CURRENT_INT);
 } /* enableinterrupts */
 
 
@@ -193,33 +213,76 @@ Name - check_io()
 Purpose - 
 ----------------------------------------------------------*/
 int check_io() {
-          return 0;
+  return 0;
 } /* check_io */
 
 
 /*--------------------------------------------------------------
-  Name - waitDevice()
-  Purpose - Do a receive operation on the mailbox associated 
-  with the given unit of the device type. The device types are 
-  defined in usloss.h. The appropriate device mailbox is sent a 
-  message every time an interrupt is generated by the I/O device, 
-  with the exception of the clock device which should only be sent 
-  a message every 100,000 time units (every 5 interrupts). This 
-  routine will be used to synchronize with a device driver process 
-  in the next phase. waitDevice returns the device’s status register 
-  in *status.
+Name - waitDevice()
+Purpose - Do a receive operation on the mailbox associated 
+with the given unit of the device type. The device types are 
+defined in usloss.h. The appropriate device mailbox is sent a 
+message every time an interrupt is generated by the I/O device, 
+with the exception of the clock device which should only be sent 
+a message every 100,000 time units (every 5 interrupts). This 
+routine will be used to synchronize with a device driver process 
+in the next phase. waitDevice returns the device’s status register 
+in *status.
 --------------------------------------------------------------*/
 int waitDevice(int type, int unit, int *status) {
-            return 0;
-} /* waitDevice */
+  return 0;
+} /* waitDevice  */
 
-/*------------------------------------------------------------
-  Name - findNextMailBox()
-  Purpose - Will find the next available index in the maibox
-  array and return it.
-  Returns - an int
-  ----------------------------------------------------------*/
-  int findNextMailBox(){
+/*----------------------------------------------------------------
+Name - findMailBox
+----------------------------------------------------------------*/
+// int findMailBox(int startingSpot) {
+//     int increments = 0;
+//     if (MailBoxTable[startingSpot].notEmpty) {
+//         int check = 0;
+//         startingSpot = (startingSpot + 1) % MAXPROC;
+//         increments++;
+//         while(check < 50) {
+//             if (DEBUG && debugflag) printf("MailBoxTable is: %d\n", MailBoxTable[startingSpot].notEmpty);
+//             if (!MailBoxTable[startingSpot].notEmpty) {
+//                 if (DEBUG && debugflag) printf("Went through the if \n");
+//                 *(slotsIncrement) = increments;
+//                 if (DEBUG && debugflag) printf("slotsIncrement: %d \n", *(slotsIncrement));
+//                 return startingSpot;
+//             }
+//             if (DEBUG && debugflag) printf("outside the if \n");
+//             startingSpot = (startingSpot + 1) % MAXPROC;
+//             increments++;
+//             check++;
+//         }
+//         // return -1 if no spots in the process table
+//         if(startingSpot == -1){
+//             *(slotsIncrement) = increments;
+//             if (DEBUG && debugflag) printf("slotsIncrement: %d \n", *(slotsIncrement));
+//             return -1;
+//         }
+//     }
+//     *(slotsIncrement) = increments;
+//     if (DEBUG && debugflag) printf("slotsIncrement: %d \n", *(slotsIncrement));
+//     return startingSpot;
+// }
+int findMailBox(int startingSpot) {
+      if (MailBoxTable[startingSpot].notEmpty) {
+        int check = 0;
+        startingSpot = (startingSpot + 1) % MAXPROC;
+        while(check < 50) {
+           if (!MailBoxTable[startingSpot].notEmpty) {
+            return startingSpot;
+           }
+           else {
+              startingSpot = (startingSpot + 1) % MAXPROC;
+              check++;
+           }
+        }
+        // return -1 if no spots in the process table
+        if(startingSpot == -1)
+          return -1;
+    }
 
-
-} /* findNextMailBox */
+    return startingSpot;
+}
