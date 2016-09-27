@@ -1,44 +1,6 @@
 
 #define DEBUG2 1
 
-typedef struct mailSlot *slotPtr;
-typedef struct mailbox   mailbox;
-typedef struct mailSlot  mailSlot;
-typedef struct mboxProc *mboxProcPtr;
-
-struct mailbox {
-    int       mboxID;
-    // other items as needed...
-    
-    slotPtr   slotList;         // pointer to slots
-    int       numSlots;
-    procPtr   waitingToSend;    // pointer to processes waiting to send
-    procPtr   waitingToReceive  // pointer to processes waiting to receive
-};
-
-struct mailSlot {
-    int       mboxID;
-    int       status;
-    // other items as needed...
-};
-
-struct psrBits {
-    unsigned int curMode:1;
-    unsigned int curIntEnable:1;
-    unsigned int prevMode:1;
-    unsigned int prevIntEnable:1;
-    unsigned int unused:28;
-};
-
-union psrValues {
-    struct psrBits bits;
-    unsigned int integerPart;
-};
-
-// TODO define system call vector
-
-
-
 // define Process structures here
 typedef struct procStruct procStruct;
 
@@ -74,6 +36,49 @@ struct procStruct {
    // int             cpu;             /* cpu time */
    // procPtr         zappedMe;         /* Who zapped me */
 };
+
+
+
+typedef struct mailSlot *slotPtr;
+typedef struct mailbox   mailbox;
+typedef struct mailSlot  mailSlot;
+typedef struct mboxProc *mboxProcPtr;
+
+struct mailbox {
+    int       mboxID;
+    // other items as needed...
+    
+    slotPtr   slotList;         // pointer to slots
+    int       numSlots;
+    procPtr   waitingToSend;    // pointer to processes waiting to send
+    procPtr   waitingToReceive;  // pointer to processes waiting to receive
+    int       isReleased; // 1 if it is, 0 if not
+};
+
+struct mailSlot {
+    int       mboxID;
+    int       status;
+    // other items as needed...
+};
+
+struct psrBits {
+    unsigned int curMode:1;
+    unsigned int curIntEnable:1;
+    unsigned int prevMode:1;
+    unsigned int prevIntEnable:1;
+    unsigned int unused:28;
+};
+
+union psrValues {
+    struct psrBits bits;
+    unsigned int integerPart;
+};
+
+// TODO define system call vector
+
+
+
+
 
 #define     EMPTY 0
 #define     FULL 1
