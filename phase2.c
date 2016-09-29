@@ -28,6 +28,7 @@ void enableInterrupts(void);
 int waitDevice(int, int, int *);
 int findMailBox();
 int findEmptySlot();
+int locateMailbox(int);
 
 
 /* -------------------------- Globals ------------------------------------- */
@@ -79,25 +80,22 @@ int start1(char *arg)
     disableInterrupts();
 
     // TODO Initialize the mail box table, slots, & other data structures.
-    // TODO set things in mailbox
+    // set things in mailbox
     for(i=0; i < MAXMBOX; i++) {
       MailBoxTable[i].mboxID = -1;
       MailBoxTable[i].isReleased = RELEASED;
     }
-
 
     // TODO set things in mailSlot
 
     // TODO Initialize USLOSS_IntVec and system call handlers,
     // set each one to nullsys
     
-    // TODO allocate mailboxes for interrupt handlers.  Etc... 
+    // allocate mailboxes for interrupt handlers.  Etc... 
     // similar to sentinel - gonna have 0 slots
     for(int i = 0; i < 7; i++) {
       MboxCreate(0,150);  
     }
-    
-
 
     enableInterrupts();
 
@@ -127,6 +125,7 @@ int start1(char *arg)
    // than MAXSLOTS messages in the system at a given time
 int MboxCreate(int slots, int slot_size)
 {
+  disableInterrupts();
 
   if(slot_size > 150) {
     return -1;
@@ -135,6 +134,7 @@ int MboxCreate(int slots, int slot_size)
   // check if there are empty slots in the MailBoxTable, and initialize if so
   int mailboxCreated = findMailBox();
 
+  // success! you can now create a new mailbox
   if(mailboxCreated != -1) {
     // save the current id and increment the global
     int tempID = nextMailBoxID;
@@ -146,14 +146,17 @@ int MboxCreate(int slots, int slot_size)
     MailBoxTable[mailboxCreated].numSlots = slots;
     MailBoxTable[mailboxCreated].slotSize = slot_size;
     MailBoxTable[mailboxCreated].usedSlots = 0;
+
+    enableInterrupts();
     return tempID;
   }
 
   else {
+    enableInterrupts();
     return -1;
   }
 
-
+  enableInterrupts();
   return 0;
 } /* MboxCreate */
 
@@ -169,22 +172,31 @@ int MboxCreate(int slots, int slot_size)
 int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 {
 
+  // TODO disable interrupts here?
+  disableInterrupts();
+
   // check for invalid arguments
-  mailbox ourMailBox = MailBoxTable[mbox_id];
+  int boxLocation = locateMailbox(mbox_id);
+  // mailbox ourMailBox = MailBoxTable[boxLocation];
+
+  // check that message size is not too big
+  // if(!(msg_size <= ourMailBox.slotSize)) {
+  if(!(msg_size <= MailBoxTable[boxLocation].slotSize)) {
+    printf("msg_size is too big\n");
+    return -1;
+  }
 
   // check if there are slots available in that mailbox
-  if(ourMailBox.usedSlots == ourMailBox.numSlots) {
-    return -1;
+  // if(ourMailBox.usedSlots == ourMailBox.numSlots) {
+  if(MailBoxTable[boxLocation].usedSlots == MailBoxTable[boxLocation].numSlots) {
+    // TODO call blockme to block the process?
   }
-  // check that message size is not too big
-  if(!msg_size <= ourMailBox.slotSize) {
-    return -1;
-  }
-
 
   // check if there are waiting processes
-  procStruct *waiting = ourMailBox.waitingToReceive;
+  // procStruct *waiting = ourMailBox.waitingToReceive;
+  procStruct *waiting = MailBoxTable[boxLocation].waitingToReceive;
 
+// TODO disable interrupts here?
 
   // if no waiting processes, use up a slot
   if(waiting == NULL) {
@@ -193,68 +205,92 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
       // you're good to go!
 
       // use up an empty mail slot
-      if(ourMailBox.slotList == NULL) {
 
+      // check if the slotList is empty
+      // if(ourMailBox.slotList == NULL) {
+      if(MailBoxTable[boxLocation].slotList == NULL) {
+
+        // find the index in the MailSlotTable
         int spot = findEmptySlot();
-        mailSlot slot = MailSlotTable[spot];
-        ourMailBox.slotList = &(slot);
+
+        // mailSlot slot = MailSlotTable[spot];
+        // ourMailBox.slotList = &(slot);
+        MailBoxTable[boxLocation].slotList = &(MailSlotTable[spot]);
         
         // initialize the slot
-        // slotPtr slot = ourMailBox.slotList;
-        slot.mboxID = mbox_id;
-        slot.status = NOT_RELEASED;
-        memcpy(slot.message, msg_ptr, msg_size);
-        slot.msgSize = msg_size;
+        MailSlotTable[spot].mboxID = mbox_id;
+        MailSlotTable[spot].status = NOT_RELEASED;
+
+        // TODO find out why none of this works
+        // void *message = &(MailSlotTable[spot].message);
+        // void *pointer = (void *)msg_ptr;
+        // printf("pointer is %s\n", (char*)pointer);
+        // printf("message is %s\n", (char*)message);
+        // printf("msg_ptr is %s\n", (char*)msg_ptr);
+        // memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
+
+        // TODO why do I have to copy from address to address here to avoid seg fault?
+        memcpy(&(MailSlotTable[spot].message), &(msg_ptr), msg_size);
+
+        // printf("msg_ptr is %s\n", (char*)msg_ptr);
+        // printf(".message is %s\n", (char*)MailSlotTable[spot].message);
+        MailSlotTable[spot].msgSize = msg_size;
         // don't initialize nextSlot
 
         // increment slotsInUse
         slotsInUse++;
 
-        // increment numSlots for ourMailBox
-        ourMailBox.numSlots++;
+        // increment usedSlots for ourMailBox
+        // ourMailBox.usedSlots++;
+        MailBoxTable[boxLocation].usedSlots++;
       }
-    } else {
-      // traverse the slotlist until you get to the expand
-      mailSlot *slot = ourMailBox.slotList;
+      // otherwise add the message to the end of the slotList
+      else {
+        // TODO fix so that ourMailBox is replaced by the spot in the MailBoxTable
+        // TODO can also assign pointer to address of spot in MailBoxTable
+        // traverse the slotlist until you get to the end
+        mailSlot *slot = MailBoxTable[boxLocation].slotList;
 
-      while(slot->nextSlot != NULL) {
-        slot = slot->nextSlot;
+        while(slot->nextSlot != NULL) {
+          slot = slot->nextSlot;
+        }
+
+        int spot = findEmptySlot();
+        mailSlot *newSlot = &(MailSlotTable[spot]);
+
+        // initialize the slot
+        newSlot->mboxID = mbox_id;
+        newSlot->status = NOT_RELEASED;
+        // TODO make sure this memcpy is working correctly
+        memcpy(newSlot->message, msg_ptr, msg_size);
+        newSlot->msgSize = msg_size;
+        // don't initialize nextSlot
+
+        // TODO make sure this hooks into our mailbox
+        slot->nextSlot = newSlot;
+
+        // increment slotsInUse
+        slotsInUse++;
+
+        // increment usedSlots for the mailbox
+        MailBoxTable[boxLocation].usedSlots++;
       }
-
-      // slot = findEmptySlot();
-      int spot = findEmptySlot();
-      mailSlot newSlot = MailSlotTable[spot];
-      // ourMailBox.slotList = slot;
-
-      // initialize the slot
-      // slotPtr slot = ourMailBox.slotList;
-      newSlot.mboxID = mbox_id;
-      newSlot.status = NOT_RELEASED;
-      memcpy(newSlot.message, msg_ptr, msg_size);
-      newSlot.msgSize = msg_size;
-      // don't initialize nextSlot
-
-      // hook into our mailbox
-      slot->nextSlot = &(newSlot);
-
-      // increment slotsInUse
-      slotsInUse++;
-
-      // increment numSlots for ourMailBox
-      ourMailBox.numSlots++;
-    }
+      enableInterrupts();
+      return 0;
+    } 
 
     // otherwise you're out of slots
     USLOSS_Console("No more mailboxes available!");
     USLOSS_Halt(1);
   }
 
-  // otherwise, copy message directly to waiting process and remove it from
-  // waiting list, and wake it up
+  // TODO otherwise, copy message directly to waiting process and remove it from
+  // waiting list, and wake it up - unblockproc?
   else {
 
   }
 
+  enableInterrupts();
   return 0;
 } /* MboxSend */
 
@@ -270,11 +306,70 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
+  // disable interrupts
+  disableInterrupts();
+
+  // look in the MailBoxTable for a mailbox with mbox_id as its id
+  int index = locateMailbox(mbox_id);
+
+  // if you get a real index, the mailbox exists
+  if(index != -1) {
+    // mailbox requestedMbox = MailBoxTable[index];
+    // printf("requested mailbox has slot with message %s\n", (char *)MailBoxTable[index].slotList->message);
+
+    // proceed if there's a message in the mailbox to receive
+    if(MailBoxTable[index].usedSlots >= 1) {
+
+      // get the first slot available
+      // TODO figure out if this should be pointer or not
+      slotPtr slot = MailBoxTable[index].slotList;
+
+      // check if current process can fit the message in its buffer
+      // if(msg_size < slot->msgSize) {
+      if(msg_size < MailBoxTable[index].slotList->msgSize) {
+        // if you can't store the size of the message, that's an error
+        return -1;
+      }
+      else {
+        // copy the message into the receiver's buffer
+        memcpy(msg_ptr, MailBoxTable[index].slotList->message, slot->msgSize);
+        // save the message size
+        long size = slot->msgSize;
+
+        // move the slotList pointer ahead
+        MailBoxTable[index].slotList = MailBoxTable[index].slotList->nextSlot;
+
+        enableInterrupts();
+        return size;
+      }
+    }
+
+    // otherwise the receiver must block and wait for a message
+    else {
+      // TODO block me
+      // TODO put on waiting list
+    }
+
+  }
+
+  else {
+    // if process is looking for a mailbox that doesn't exist, that is an error
+    return -1;
+  }
+
+  enableInterrupts();
   return 0;
 } /* MboxReceive */
 
 
-// test if in kernel mode; halt if in user mode
+/* ------------------------------------------------------------------------
+   Name - check_kernel_mode
+   Purpose - test if in kernel mode; halt if in user mode
+   Parameters - name of _______
+   Returns - none
+   Side Effects - halts if in user mode
+   ----------------------------------------------------------------------- */
+// 
 void check_kernel_mode(char *name) {
     
     if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0) {
@@ -319,7 +414,6 @@ void enableInterrupts(){
     } else {
         USLOSS_PsrSet(USLOSS_PsrGet() + num);
     }
-    if (DEBUG2 && debugflag2) USLOSS_Console("interrupt mode is %d\n", USLOSS_PsrGet() & USLOSS_PSR_CURRENT_INT);
 } /* enableinterrupts */
 
 
@@ -352,6 +446,8 @@ int waitDevice(int type, int unit, int *status) {
 
 /*----------------------------------------------------------------
 Name - findMailBox
+Purpose - Look for an empty space in the MailBoxTable, and if you 
+find one, return its index. If you don't find one, return -1.
 ----------------------------------------------------------------*/
 
 int findMailBox() {
@@ -371,13 +467,15 @@ int findMailBox() {
 
 /*----------------------------------------------------------------
 Name - findEmptySlot
+Purpose - Look for an empty slot in the MailSlotTable, and if you
+find one, return its index. If you don't find one, return -1
 ----------------------------------------------------------------*/
 
 int findEmptySlot() {
   // start at the beginning and try to find a spot
   int check = 0;
   while (check < MAXSLOTS) {
-    if(MailSlotTable[check].isReleased) {
+    if(MailSlotTable[check].status == NOT_RELEASED) {
       return check;
     } else {
       check++;
@@ -386,3 +484,21 @@ int findEmptySlot() {
 
   return -1;
 } /* findMailBox */
+
+/*----------------------------------------------------------------
+Name - locateMailbox
+Purpose - Look for a mailbox in the MailBoxTable with a specific
+id. If found, return the index of the mailbox. If not found, 
+return -1
+----------------------------------------------------------------*/
+int locateMailbox(int id) {
+    int check = 0;
+  while (check < MAXMBOX) {
+    if(MailBoxTable[check].mboxID == id) {
+      return check;
+    } else {
+      check++;
+    }
+  }
+  return -1;
+}
