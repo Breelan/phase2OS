@@ -10,19 +10,22 @@ struct procStruct {
    // TODO address to buffer
    // TODO size of the buffer
    // TODO why they're waiting
-   procPtr         nextProcPtr;
-   procPtr         childProcPtr;
-   procPtr         nextSiblingPtr;
-   procPtr         nextQuitSibling;
-   char            name[MAXNAME];     /* process's name */
-   char            startArg[MAXARG];  /* args passed to process */
-   USLOSS_Context  state;             /* current context for process */
+   // procPtr         nextProcPtr;
+   // procPtr         childProcPtr;
+   // procPtr         nextSiblingPtr;
+   // procPtr         nextQuitSibling;
+   // char            name[MAXNAME];     /* process's name */
+   // char            startArg[MAXARG];  /* args passed to process */
+   // USLOSS_Context  state;             /* current context for process */
    short           pid;               /* process id */
-   int             priority;
-   int (* startFunc) (char *);   /* function where process begins -- launch */
-   char           *stack;
-   unsigned int    stackSize;
+   // int             priority;
+   // int (* startFunc) (char *);   /* function where process begins -- launch */
+   // char           *stack;
+   // unsigned int    stackSize;
    int             status;        /* READY, BLOCKED, QUIT, etc. */
+   void           *message;      /* message sender is trying to send */
+   int             msgSize;      /* the size of the message sender is trying to send */      
+   void           *buffer;       /* the place the receiver is trying to store a message */
    
    /* other fields as needed... */
    // int             notEmpty;       /* 1 if slot is not empty, 0 if slot is empty*/
@@ -55,6 +58,8 @@ struct mailbox {
     procPtr   waitingToSend;    // pointer to processes waiting to send
     procPtr   waitingToReceive; // pointer to processes waiting to receive
     int       isReleased;       // 1 if this mailbox is available, 0 if not
+    int       numWaitingToSend; // number of processes waiting to send
+    int       numWaitingToReceive; // number of processes waiting to receive
 };
 
 struct mailSlot {
@@ -84,8 +89,8 @@ union psrValues {
 #define     NOT_RELEASED 0
 #define     RELEASED 1
 
-
 #define     EMPTY 0
 #define     FULL 1
-Contact GitHub API Training Shop Blog About
-© 2016 GitHub, Inc. Terms Privacy Security Status Help
+
+#define     BLOCKSEND 11
+#define     BLOCKRECEIVE 12
