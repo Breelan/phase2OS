@@ -61,9 +61,8 @@ struct mailSlot {
     int       mboxID;
     int       status;
     // other items as needed...
-    void      *message;   // the message the slot contains
+    void     *message;   // the message the slot contains
     int       msgSize;    // the size of the message in the slot
-    int       isReleased;
     slotPtr   nextSlot;   // the pointer to the next slot in the mailbox
 };
 
