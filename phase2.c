@@ -79,14 +79,14 @@ int start1(char *arg)
     // Disable interrupts
     disableInterrupts();
 
-    // TODO Initialize the mail box table, slots, & other data structures.
+    // Initialize the mail box table, slots, & other data structures.
     // set things in mailbox
     for(i=0; i < MAXMBOX; i++) {
       MailBoxTable[i].mboxID = -1;
       MailBoxTable[i].isReleased = RELEASED;
     }
 
-    // TODO set things in mailSlot
+    // set things in mailSlot
     for(j = 0; j < MAXSLOTS; j++) {
       MailSlotTable[j].status = RELEASED;
       // MailSlotTable[j].nextSlot = NULL;
@@ -177,7 +177,7 @@ int MboxCreate(int slots, int slot_size)
 int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 {
 
-  // TODO disable interrupts here?
+  // disable interrupts here
   disableInterrupts();
 
   // check for invalid arguments
@@ -192,12 +192,9 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
   // TODO this is untested, check it if something goes wrong
   // check if there are slots available in that mailbox
   if(MailBoxTable[boxLocation].usedSlots == MailBoxTable[boxLocation].numSlots) {
-    // TODO call blockme to block the process here? or below?
-    // blockMe(BLOCKSEND);
-    // disableInterrupts(); // blockMe enables interrupts
 
 
-    // TODO add sender to end of mailbox's waitingToSend
+    // add sender to end of mailbox's waitingToSend
     if (MailBoxTable[boxLocation].waitingToSend ==  NULL)  {
       // add sender to phase2 proc table
       // add pid, message ptr, msg size
@@ -206,15 +203,17 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
       ProcTable[procSpot].pid = procSpot;
       ProcTable[procSpot].message = msg_ptr;
       ProcTable[procSpot].msgSize = msg_size;
+      ProcTable[procSpot].status = BLOCKSEND;
 
       // add a pointer to that place in the procTable to the end of
       // this mailbox's waiting list
       MailBoxTable[boxLocation].waitingToSend = &(ProcTable[procSpot]);
       blockMe(BLOCKSEND);
 
-      // check if process has been zapped
+      // check if process has been "zapped"
       disableInterrupts();
-      if(isZapped()) {
+      // if(isZapped()) {
+      if(ProcTable[procSpot].status == ZAPPED) {
         enableInterrupts();
         return -3;
       }
@@ -231,13 +230,15 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
       ProcTable[procSpot].pid = procSpot;
       ProcTable[procSpot].message = msg_ptr;
       ProcTable[procSpot].msgSize = msg_size;
+      ProcTable[procSpot].status = BLOCKSEND;
 
       end->nextProcPtr = &(ProcTable[procSpot]);
       blockMe(BLOCKSEND);
 
-      // check if I've been zapped
+      // check if I've been "zapped"
       disableInterrupts();
-      if(isZapped()) {
+      // if(isZapped()) {
+      if(ProcTable[procSpot].status == ZAPPED) {
         enableInterrupts();
         return -3;
       }
@@ -411,6 +412,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         ProcTable[procSpot].pid = procSpot;
         ProcTable[procSpot].message = msg_ptr;
         ProcTable[procSpot].msgSize = msg_size;
+        ProcTable[procSpot].status = BLOCKRECEIVE;
 
         // add a pointer to that place in the procTable to the end of
         // this mailbox's waiting list
@@ -419,7 +421,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         return ProcTable[procSpot].msgSize;
       }
       else {
-        // TODO handle the case where multiple things are waiting
+        // handle the case where multiple things are waiting
         procPtr firstWaiting = MailBoxTable[index].waitingToReceive;
         while(firstWaiting->nextProcPtr != NULL) {
           firstWaiting = firstWaiting->nextProcPtr;
@@ -473,7 +475,29 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxRelease(int mailboxID) {
 
+  // TODO check if process was zapped while releasing the mailbox?
+
   disableInterrupts();
+  int index = locateMailbox(mailboxID);
+
+  // return -1 if you don't find the mailbox with mailboxID
+  if (index == -1) {
+    return -1;
+  }
+
+  // otherwise, "zap" all waiting processes (senders and receivers)
+  else {
+
+    // TODO check for senders
+    if(MailBoxTable[index].waitingToSend != NULL) {
+
+    }
+
+
+    // TODO check for receivers
+
+    // TODO release all the mailslots
+  }
 
   return 0;
 } /* MboxRelease */

@@ -11,6 +11,7 @@ struct procStruct {
    short           pid;               /* process id */
    void            *message;      /* message sender is trying to send */
    int             msgSize;      /* the size of the message sender is trying to send */      
+   int             status;       /* the status of the waiting process */
 };
 
 typedef struct mailSlot *slotPtr;
