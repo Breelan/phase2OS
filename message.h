@@ -10,7 +10,7 @@ struct procStruct {
    // TODO address to buffer
    // TODO size of the buffer
    // TODO why they're waiting
-   // procPtr         nextProcPtr;
+   procPtr         nextProcPtr;
    // procPtr         childProcPtr;
    // procPtr         nextSiblingPtr;
    // procPtr         nextQuitSibling;
@@ -22,10 +22,10 @@ struct procStruct {
    // int (* startFunc) (char *);   /* function where process begins -- launch */
    // char           *stack;
    // unsigned int    stackSize;
-   int             status;        /* READY, BLOCKED, QUIT, etc. */
-   void           *message;      /* message sender is trying to send */
+   // int             status;        /* READY, BLOCKED, QUIT, etc. */
+   void            *message;      /* message sender is trying to send */
    int             msgSize;      /* the size of the message sender is trying to send */      
-   void           *buffer;       /* the place the receiver is trying to store a message */
+   // char            *buffer;       /* the place the receiver is trying to store a message */
    
    /* other fields as needed... */
    // int             notEmpty;       /* 1 if slot is not empty, 0 if slot is empty*/
@@ -66,7 +66,7 @@ struct mailSlot {
     int       mboxID;
     int       status;
     // other items as needed...
-    void     *message;   // the message the slot contains
+    char      message[150];   // the message the slot contains
     int       msgSize;    // the size of the message in the slot
     slotPtr   nextSlot;   // the pointer to the next slot in the mailbox
 };
@@ -88,9 +88,6 @@ union psrValues {
 
 #define     NOT_RELEASED 0
 #define     RELEASED 1
-
-#define     EMPTY 0
-#define     FULL 1
 
 #define     BLOCKSEND 11
 #define     BLOCKRECEIVE 12
