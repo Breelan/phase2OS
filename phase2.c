@@ -268,6 +268,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         // initialize the slot
         MailSlotTable[spot].mboxID = spot;
         MailSlotTable[spot].status = NOT_RELEASED;
+        slotsInUse++;
 
         // TODO why do I have to copy from address to address here to avoid seg fault?
         memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
@@ -299,6 +300,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         MailSlotTable[spot].status = NOT_RELEASED;
         memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
         MailSlotTable[spot].msgSize = msg_size;
+        slotsInUse++;
 
         // hook this slot into our mailbox
         slot->nextSlot = &(MailSlotTable[spot]);
@@ -350,10 +352,29 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     in the system are used and none are available to allocate for this message.
   Return values:
     -3: process was zap’d.
-    -2: mailbox full, message not sent; or no slots available in the system. -1: illegal values given as arguments.
+    -2: mailbox full, message not sent; or no slots available in the system. 
+    -1: illegal values given as arguments.
     0: message sent successfully. 
 ------------------------------------------------------------------------------*/
 int MboxCondSend(int mailboxID, void *message, int messageSize){
+  disableInterrupts();
+  // No blocking! 
+  // TODO check if mailbox all mailbox slots in system are used
+  if (slotsInUse >= MAXSLOTS){
+    return -2;
+  }
+  // TODO Check if mailbox has available slots
+  mailbox mBox = MailBoxTable[locateMailbox(mailboxID)];
+  if (mBox.usedslots < mBox.numSlots){
+
+  }
+  else {
+    return -2;
+  }
+  
+  // TODO check if process was zapped
+  // TODO send message
+  
   return 0;
 } 
 
@@ -404,6 +425,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         slotPtr released_slot = MailBoxTable[index].slotList;
         // change status to released
         released_slot->status = RELEASED;
+        slotsInUse--;
         // decrement usedSlots
         MailBoxTable[index].usedSlots--;
         // move the slotList pointer ahead
@@ -553,6 +575,7 @@ int MboxRelease(int mailboxID){
     while (slot->nextSlot != NULL){
       slotPtr releasingSlot = slot;
       slot->status = RELEASED;
+      slotsInUse--;
       slot = slot->nextSlot;
       releasingSlot->nextSlot = NULL;
     }
