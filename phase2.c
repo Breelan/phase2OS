@@ -69,7 +69,7 @@ int slotsInUse = 0;
 int start1(char *arg)
 {
 
-    int kid_pid, status, i;
+    int kid_pid, status, i, j;
 
     if (DEBUG2 && debugflag2)
         USLOSS_Console("start1(): at beginning\n");
@@ -87,6 +87,10 @@ int start1(char *arg)
     }
 
     // TODO set things in mailSlot
+    for(j = 0; j < MAXSLOTS; j++) {
+      MailSlotTable[j].status = RELEASED;
+      // MailSlotTable[j].nextSlot = NULL;
+    }
 
     // TODO Initialize USLOSS_IntVec and system call handlers,
     // set each one to nullsys
@@ -184,6 +188,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     return -1;
   }
 
+  // TODO this is untested, check it if something goes wrong
   // check if there are slots available in that mailbox
   if(MailBoxTable[boxLocation].usedSlots == MailBoxTable[boxLocation].numSlots) {
     // TODO call blockme to block the process here? or below?
@@ -193,26 +198,38 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 
     // TODO add sender to end of mailbox's waitingToSend
     if (MailBoxTable[boxLocation].waitingToSend ==  NULL)  {
-      // TODO add sender to phase2 proc table
-        // TODO add pid, message ptr, msg size, status
+      // add sender to phase2 proc table
+      // add pid, message ptr, msg size, status
       int procSpot = getpid();
 
       ProcTable[procSpot].pid = procSpot;
-      memcpy(&(ProcTable[procSpot].message), &(msg_ptr), msg_size);
+      ProcTable[procSpot].message = msg_ptr;
       ProcTable[procSpot].msgSize = msg_size;
-      // procTable[procSpot].status = BLOCKSEND; // TODO decide if we want to store it here
 
-      // TODO add a pointer to that place in the procTable to the end of
+      // add a pointer to that place in the procTable to the end of
       // this mailbox's waiting list
       MailBoxTable[boxLocation].waitingToSend = &(ProcTable[procSpot]);
+      blockMe(BLOCKSEND);
+    } else {
+      // get to the end of the waitingToSend and add a process
+      procPtr end = MailBoxTable[boxLocation].waitingToSend;
+      while(end->nextProcPtr != NULL) {
+        end = end->nextProcPtr;
+      }
+
+      int procSpot = getpid();
+
+      ProcTable[procSpot].pid = procSpot;
+      ProcTable[procSpot].message = msg_ptr;
+      ProcTable[procSpot].msgSize = msg_size;
+
+      end->nextProcPtr = &(ProcTable[procSpot]);
       blockMe(BLOCKSEND);
     }
   }
 
   // check if there are waiting processes
   procStruct *waiting = MailBoxTable[boxLocation].waitingToReceive;
-
-// TODO disable interrupts here?
 
   // if no waiting processes, use up a slot
   if(waiting == NULL) {
@@ -224,29 +241,18 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 
       // check if the slotList is empty
       if(MailBoxTable[boxLocation].slotList == NULL) {
-
         // find the index in the MailSlotTable
         int spot = findEmptySlot();
 
         MailBoxTable[boxLocation].slotList = &(MailSlotTable[spot]);
         
         // initialize the slot
-        MailSlotTable[spot].mboxID = mbox_id;
+        MailSlotTable[spot].mboxID = spot;
         MailSlotTable[spot].status = NOT_RELEASED;
 
-        // TODO find out why none of this works
-        // void *message = &(MailSlotTable[spot].message);
-        // void *pointer = (void *)msg_ptr;
-        // printf("pointer is %s\n", (char*)pointer);
-        // printf("message is %s\n", (char*)message);
-        // printf("msg_ptr is %s\n", (char*)msg_ptr);
-        // memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
-
         // TODO why do I have to copy from address to address here to avoid seg fault?
-        memcpy(&(MailSlotTable[spot].message), &(msg_ptr), msg_size);
+        memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
 
-        // printf("msg_ptr is %s\n", (char*)msg_ptr);
-        // printf(".message is %s\n", (char*)MailSlotTable[spot].message);
         MailSlotTable[spot].msgSize = msg_size;
         // don't initialize nextSlot
 
@@ -267,18 +273,13 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         }
 
         int spot = findEmptySlot();
-        mailSlot *newSlot = &(MailSlotTable[spot]);
+        MailSlotTable[spot].mboxID = spot;
+        MailSlotTable[spot].status = NOT_RELEASED;
+        memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
+        MailSlotTable[spot].msgSize = msg_size;
 
-        // initialize the slot
-        newSlot->mboxID = mbox_id;
-        newSlot->status = NOT_RELEASED;
-        // TODO make sure this memcpy is working correctly
-        memcpy(newSlot->message, msg_ptr, msg_size);
-        newSlot->msgSize = msg_size;
-        // don't initialize nextSlot
-
-        // TODO make sure this hooks into our mailbox
-        slot->nextSlot = newSlot;
+        // hook this slot into our mailbox
+        slot->nextSlot = &(MailSlotTable[spot]);
 
         // increment slotsInUse
         slotsInUse++;
@@ -295,18 +296,19 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     USLOSS_Halt(1);
   }
 
-  // TODO otherwise, copy message directly to waiting process and remove it from
+  // TODO handle multiple things on the waiting list
+  // otherwise, copy message directly to waiting process and remove it from
   // waiting list, and wake it up - unblockproc?
   else {
-    // TODO get the waiting process
-    memcpy(MailBoxTable[boxLocation].waitingToReceive, msg_ptr, msg_size);
+    // get the waiting process and copy the message
+    memcpy(MailBoxTable[boxLocation].waitingToReceive->message, msg_ptr, msg_size);
 
-    // TODO copy the message to waiting process' buffer
+    // update the message size for the waiting process
+    MailBoxTable[boxLocation].waitingToReceive->msgSize = msg_size;
 
-
-    // TODO unblock the process
+    // unblock the process
     unblockProc(MailBoxTable[boxLocation].waitingToReceive->pid);
-    return msg_size;
+    return 0;
   }
 
   enableInterrupts();
@@ -334,7 +336,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
   // if you get a real index, the mailbox exists
   if(index != -1) {
     // mailbox requestedMbox = MailBoxTable[index];
-    // printf("requested mailbox has slot with message %s\n", (char *)MailBoxTable[index].slotList->message);
 
     // proceed if there's a message in the mailbox to receive
     if(MailBoxTable[index].usedSlots >= 1) {
@@ -352,14 +353,23 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
       else {
         // copy the message into the receiver's buffer
         memcpy(msg_ptr, MailBoxTable[index].slotList->message, slot->msgSize);
-        // save the message size
-        long size = slot->msgSize;
 
         // move the slotList pointer ahead
+        MailBoxTable[index].slotList->status = RELEASED;
+        MailBoxTable[index].slotList->nextSlot = NULL;
+        MailBoxTable[index].usedSlots--;
         MailBoxTable[index].slotList = MailBoxTable[index].slotList->nextSlot;
+        
+        // TODO check if anyone's on the waiting list and wake them up?
+        if(MailBoxTable[index].waitingToSend != NULL) {
+          int pid = MailBoxTable[index].waitingToSend->pid;
+          // TODO move this forward to next pointer
+          MailBoxTable[index].waitingToSend = MailBoxTable[index].waitingToSend->nextProcPtr;;
+          unblockProc(pid);  
+        }
 
         enableInterrupts();
-        return size;
+        return msg_size;
       }
     }
 
@@ -370,21 +380,27 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
       // disableInterrupts(); // blockMe enables interrupts
 
       // add receiver to end of mailbox's waitingToReceive
+
+      // there's nothing waiting yet
       if (MailBoxTable[index].waitingToReceive ==  NULL)  {
         // add receiver to phase2 proc table
           // add pid, buffer ptr, msg size
         int procSpot = getpid();
 
         ProcTable[procSpot].pid = procSpot;
-        memcpy(&(ProcTable[procSpot].buffer), &(msg_ptr), msg_size);
+        // memcpy(&ProcTable[procSpot].message, msg_ptr, msg_size);
+        ProcTable[procSpot].message = msg_ptr;
         ProcTable[procSpot].msgSize = msg_size;
         // procTable[procSpot].status = BLOCKRECEIVER; // TODO decide if we want to store it here
 
         // add a pointer to that place in the procTable to the end of
         // this mailbox's waiting list
         MailBoxTable[index].waitingToReceive = &(ProcTable[procSpot]);
-        blockMe(BLOCKRECEIVE);
+        blockMe(BLOCKRECEIVE); // blockMe enables interrupts?
+        return ProcTable[procSpot].msgSize;
       }
+
+      // TODO handle the case where multiple things are waiting
     }
 
   }
@@ -512,7 +528,7 @@ int findEmptySlot() {
   // start at the beginning and try to find a spot
   int check = 0;
   while (check < MAXSLOTS) {
-    if(MailSlotTable[check].status == NOT_RELEASED) {
+    if(MailSlotTable[check].status == RELEASED) {
       return check;
     } else {
       check++;
