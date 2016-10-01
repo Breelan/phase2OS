@@ -7,40 +7,11 @@ typedef struct procStruct procStruct;
 typedef struct procStruct * procPtr;
 
 struct procStruct {
-   // TODO address to buffer
-   // TODO size of the buffer
-   // TODO why they're waiting
    procPtr         nextProcPtr;
-   // procPtr         childProcPtr;
-   // procPtr         nextSiblingPtr;
-   // procPtr         nextQuitSibling;
-   // char            name[MAXNAME];     /* process's name */
-   // char            startArg[MAXARG];  /* args passed to process */
-   // USLOSS_Context  state;             /* current context for process */
    short           pid;               /* process id */
-   // int             priority;
-   // int (* startFunc) (char *);   /* function where process begins -- launch */
-   // char           *stack;
-   // unsigned int    stackSize;
-   // int             status;        /* READY, BLOCKED, QUIT, etc. */
    void            *message;      /* message sender is trying to send */
    int             msgSize;      /* the size of the message sender is trying to send */      
-   // char            *buffer;       /* the place the receiver is trying to store a message */
-   
-   /* other fields as needed... */
-   // int             notEmpty;       /* 1 if slot is not empty, 0 if slot is empty*/
-   // procPtr         parentPtr;         /* parent pid, if has parent */
-   // procPtr         quitChildren;      /* a list of children who have quit */
-   // int             startedExecution;  /* the time this process started running */
-   // int             exitStatus;        /* status at quit */
-   // int             isZapped;        /* If true, 1 if false -1 */
-   // int             kids;            /* number of kids */
-   // short           parentPid;       /* pid of parent */
-   // int             cpu;             /* cpu time */
-   // procPtr         zappedMe;         /* Who zapped me */
 };
-
-
 
 typedef struct mailSlot *slotPtr;
 typedef struct mailbox   mailbox;
@@ -65,6 +36,7 @@ struct mailbox {
 struct mailSlot {
     int       mboxID;
     int       status;
+
     // other items as needed...
     char      message[150];   // the message the slot contains
     int       msgSize;    // the size of the message in the slot
