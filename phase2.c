@@ -28,8 +28,9 @@ int waitDevice(int, int, int *);
 int findMailBox();
 int findEmptySlot();
 int locateMailbox(int);
-int MboxRelease(int mailboxID);
-int MboxCondSend(int mailboxID, void *message, int messageSize);
+int MboxRelease(int);
+int MboxCondSend(int, void *, int);
+int MboxCondReceive(int, void *, int);
 
 
 /* -------------------------- Globals ------------------------------------- */
@@ -189,33 +190,22 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     return -1;
   }
 
-  // check if there are slots available in that mailbox
+  // if all the slots in that mailbox are used up and it's not a 0-slot mailbox...
   if(MailBoxTable[boxLocation].usedSlots == MailBoxTable[boxLocation].numSlots && MailBoxTable[boxLocation].numSlots != 0) {
+
+    // add sender to phase2 proc table
+    // add pid, message ptr, msg size
+    int procSpot = getpid();
+
+    ProcTable[procSpot].pid = procSpot;
+    ProcTable[procSpot].message = msg_ptr;
+    ProcTable[procSpot].msgSize = msg_size;
+    ProcTable[procSpot].status = BLOCKSEND;
 
     // add sender to end of mailbox's waitingToSend
     if (MailBoxTable[boxLocation].waitingToSend ==  NULL)  {
-      // add sender to phase2 proc table
-      // add pid, message ptr, msg size
-      int procSpot = getpid();
 
-      ProcTable[procSpot].pid = procSpot;
-      ProcTable[procSpot].message = msg_ptr;
-      ProcTable[procSpot].msgSize = msg_size;
-      ProcTable[procSpot].status = BLOCKSEND;
-
-      // add a pointer to that place in the procTable to the end of
-      // this mailbox's waiting list
       MailBoxTable[boxLocation].waitingToSend = &(ProcTable[procSpot]);
-      
-      blockMe(BLOCKSEND);
-
-      disableInterrupts();
-      // CHECK for ZAPPED
-      if (ProcTable[procSpot].status == ZAPPED){
-        enableInterrupts();
-        return -3;
-      }
-      enableInterrupts();
 
     } else {
       // get to the end of the waitingToSend and add a process
@@ -223,25 +213,20 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
       while(end->nextProcPtr != NULL) {
         end = end->nextProcPtr;
       }
-
-      int procSpot = getpid();
-
-      ProcTable[procSpot].pid = procSpot;
-      ProcTable[procSpot].message = msg_ptr;
-      ProcTable[procSpot].msgSize = msg_size;
-      ProcTable[procSpot].status = BLOCKSEND;
-
       end->nextProcPtr = &(ProcTable[procSpot]);
-      blockMe(BLOCKSEND);
-      
-      disableInterrupts();
-      // CHECK for ZAPPED
-      if (ProcTable[procSpot].status == ZAPPED){
-        enableInterrupts();
-        return -3;
-      }
+    }      
+
+    // block the process
+    blockMe(BLOCKSEND);
+    
+    // when it wakes up, disable interrupts and check it it's been zapped
+    disableInterrupts();
+    if (ProcTable[procSpot].status == ZAPPED){
       enableInterrupts();
+      return -3;
     }
+    // enableInterrupts();
+    // return 0;
   }
 
   // check if there are waiting processes
@@ -254,35 +239,29 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
       // you're good to go!
 
       // use up an empty mail slot
+      int spot = findEmptySlot();
+      
+      // initialize the slot
+      MailSlotTable[spot].mboxID = spot;
+      MailSlotTable[spot].status = NOT_RELEASED;
+      memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
+      MailSlotTable[spot].msgSize = msg_size;
 
-      // check if the slotList is empty
+      // increment slotsInUse
+      slotsInUse++;
+
+      // increment usedSlots for the mailbox
+      MailBoxTable[boxLocation].usedSlots++;
+
+      // check if the slotList is empty and initialize slotList for that mailbox
       if(MailBoxTable[boxLocation].slotList == NULL) {
-        // find the index in the MailSlotTable
-        int spot = findEmptySlot();
 
         MailBoxTable[boxLocation].slotList = &(MailSlotTable[spot]);
-        
-        // initialize the slot
-        MailSlotTable[spot].mboxID = spot;
-        MailSlotTable[spot].status = NOT_RELEASED;
-        // slotsInUse++;
-
-        memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
-
-        MailSlotTable[spot].msgSize = msg_size;
-
-        // increment slotsInUse
-        slotsInUse++;
-
-        // increment usedSlots for the mailbox
-        MailBoxTable[boxLocation].usedSlots++;
-        // printf("%s: %d\n", "incremented usedslots", MailBoxTable[boxLocation].usedSlots);
+      
       }
       // otherwise add the message to the end of the slotList
       else {
-        // printf("do i seg in else\n");
 
-        // TODO can also assign pointer to address of spot in MailBoxTable
         // traverse the slotlist until you get to the end
         mailSlot *slot = MailBoxTable[boxLocation].slotList;
 
@@ -290,21 +269,9 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
           slot = slot->nextSlot;
         }
 
-        int spot = findEmptySlot();
-        MailSlotTable[spot].mboxID = spot;
-        MailSlotTable[spot].status = NOT_RELEASED;
-        memcpy(MailSlotTable[spot].message, msg_ptr, msg_size);
-        MailSlotTable[spot].msgSize = msg_size;
-        // slotsInUse++;
-
         // hook this slot into our mailbox
         slot->nextSlot = &(MailSlotTable[spot]);
 
-        // increment slotsInUse
-        slotsInUse++;
-
-        // increment usedSlots for the mailbox
-        MailBoxTable[boxLocation].usedSlots++;
       }
       enableInterrupts();
       return 0;
@@ -315,8 +282,11 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     USLOSS_Halt(1);
   }
 
+  // TODO fix this!!!!!
   // are you trying to copy to a 0-slot mailbox?
   else if(MailBoxTable[boxLocation].numSlots == 0) {
+    // check if there are any waiting receivers
+    // otherwise block
     
     // check if there are any blocked receivers
     if (MailBoxTable[boxLocation].waitingToReceive != NULL) {
@@ -398,7 +368,6 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
   // otherwise, copy message directly to waiting process and remove it from
   // waiting list, and wake it up - unblockproc?
   else {
-        // printf("do i seg here\n");
 
     // get the waiting process and copy the message
     memcpy(MailBoxTable[boxLocation].waitingToReceive->message, msg_ptr, msg_size);
@@ -437,15 +406,15 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 int MboxCondSend(int mailboxID, void *message, int messageSize){
   disableInterrupts();
   // No blocking! 
-  // TODO check if mailbox all mailbox slots in system are used
+  // check if all mailbox slots in system are used
   if (slotsInUse >= MAXSLOTS){
     enableInterrupts();
     return -2;
   }
   // Check if mailbox has available slots
-  // mailbox mBox = MailBoxTable[locateMailbox(mailboxID)];
   int boxLocation = locateMailbox(mailboxID);
   if (MailBoxTable[boxLocation].usedSlots < MailBoxTable[boxLocation].numSlots){
+
     // check if there are waiting processes
     procStruct *waiting = MailBoxTable[boxLocation].waitingToReceive;
 
@@ -455,34 +424,26 @@ int MboxCondSend(int mailboxID, void *message, int messageSize){
 
         // use up an empty mail slot
 
+        // initialize the slot
+        int spot = findEmptySlot();
+        MailSlotTable[spot].mboxID = spot;
+        MailSlotTable[spot].status = NOT_RELEASED;
+        memcpy(MailSlotTable[spot].message, message, messageSize);
+        MailSlotTable[spot].msgSize = messageSize;
+
+        // increment slotsInUse
+        slotsInUse++;
+        MailBoxTable[boxLocation].usedSlots++;
+
         // check if the slotList is empty
         if(MailBoxTable[boxLocation].slotList == NULL) {
-          // find the index in the MailSlotTable
-          int spot = findEmptySlot();
 
           MailBoxTable[boxLocation].slotList = &(MailSlotTable[spot]);
-          
-          // initialize the slot
-          MailSlotTable[spot].mboxID = spot;
-          MailSlotTable[spot].status = NOT_RELEASED;
-          slotsInUse++;
 
-          memcpy(MailSlotTable[spot].message, message, messageSize);
-
-          MailSlotTable[spot].msgSize = messageSize;
-
-          // increment slotsInUse
-          slotsInUse++;
-
-          // increment usedSlots for the mailbox
-          MailBoxTable[boxLocation].usedSlots++;
-          // printf("%s: %d\n", "incremented usedslots", MailBoxTable[boxLocation].usedSlots);
         }
         // otherwise add the message to the end of the slotList
         else {
-          // printf("do i seg in else\n");
 
-          // TODO can also assign pointer to address of spot in MailBoxTable
           // traverse the slotlist until you get to the end
           mailSlot *slot = MailBoxTable[boxLocation].slotList;
 
@@ -490,28 +451,11 @@ int MboxCondSend(int mailboxID, void *message, int messageSize){
             slot = slot->nextSlot;
           }
 
-          int spot = findEmptySlot();
-          MailSlotTable[spot].mboxID = spot;
-          MailSlotTable[spot].status = NOT_RELEASED;
-          memcpy(MailSlotTable[spot].message, message, messageSize);
-          MailSlotTable[spot].msgSize = messageSize;
-          slotsInUse++;
-
           // hook this slot into our mailbox
           slot->nextSlot = &(MailSlotTable[spot]);
-
-          // increment slotsInUse
-          slotsInUse++;
-
-          // increment usedSlots for the mailbox
-          MailBoxTable[boxLocation].usedSlots++;
         }
         enableInterrupts();
         return 0;
-      // } 
-
-      // otherwise you're out of slots
-      // return -2;
     }
 
     else if (MailBoxTable[boxLocation].numSlots == 0) {
@@ -522,9 +466,8 @@ int MboxCondSend(int mailboxID, void *message, int messageSize){
 
     // TODO handle multiple things on the waiting list
     // otherwise, copy message directly to waiting process and remove it from
-    // waiting list, and wake it up - unblockproc?
+    // waiting list, and wake it up
     else {
-          // printf("do i seg here\n");
 
       // get the waiting process and copy the message
       memcpy(MailBoxTable[boxLocation].waitingToReceive->message, message, messageSize);
@@ -541,19 +484,11 @@ int MboxCondSend(int mailboxID, void *message, int messageSize){
       return 0;
     }
 
-  enableInterrupts();
-  return -2;
   }
 
-  // else {
-  //   enableInterrupts();
-  //   return -2;
-  // }
-  
-  // TODO check if process was zapped
-  // TODO send message
+  // otherwise there are no available slots in the mailbox
   enableInterrupts();
-  return 0;
+  return -2;
 } 
 
 
@@ -629,43 +564,32 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
     else {
       // add receiver to end of mailbox's waitingToReceive
 
+      // add receiver to phase2 proc table
+      // add pid, buffer ptr, msg size
+      int procSpot = getpid();
+
+      ProcTable[procSpot].pid = procSpot;
+      ProcTable[procSpot].message = msg_ptr;
+      ProcTable[procSpot].msgSize = msg_size;
+      ProcTable[procSpot].status = BLOCKRECEIVE;
+
       // there's nothing waiting yet
       if (MailBoxTable[index].waitingToReceive ==  NULL)  {
-        // add receiver to phase2 proc table
-          // add pid, buffer ptr, msg size
-        int procSpot = getpid();
-
-        ProcTable[procSpot].pid = procSpot;
-        ProcTable[procSpot].message = msg_ptr;
-        ProcTable[procSpot].msgSize = msg_size;
-        ProcTable[procSpot].status = BLOCKRECEIVE;
 
         // add a pointer to that place in the procTable to the end of
         // this mailbox's waiting list
         MailBoxTable[index].waitingToReceive = &(ProcTable[procSpot]);
-        blockMe(BLOCKRECEIVE);
-        disableInterrupts();
-        // CHECK for ZAPPED
-        if (ProcTable[procSpot].status == ZAPPED){
-          enableInterrupts();
-          return -3;
-        }
-        enableInterrupts();
-        return ProcTable[procSpot].msgSize;
-      }
+
+      } else {
 
       // TODO handle the case where multiple things are waiting
       procPtr currentWaiting = MailBoxTable[index].waitingToReceive;
       while (currentWaiting->nextProcPtr != NULL){
         currentWaiting = currentWaiting->nextProcPtr;
       }
-      int procSpot = getpid();
-      ProcTable[procSpot].pid = getpid();
-      ProcTable[procSpot].message = msg_ptr;
-      ProcTable[procSpot].msgSize = msg_size;
-      ProcTable[procSpot].status = BLOCKRECEIVE;
 
       currentWaiting->nextProcPtr = &(ProcTable[procSpot]);
+    }
       blockMe(BLOCKRECEIVE);
 
       disableInterrupts();
@@ -684,10 +608,68 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
     enableInterrupts();
     return -1;
   }
+  
   enableInterrupts();
-
   return 0;
 } /* MboxReceive */
+
+
+/*-----------------------------------------------------------------------------
+Name: MboxCondReceive
+Purpose: conditionally receive a message from a mailbox. do not block the
+receiver. if a message is received, return the size of the message.
+Returns: >= 0: the size of the message received, -1 if illegal arguments given,
+-2 mailbox is empty
+-----------------------------------------------------------------------------*/
+int MboxCondReceive(int mailboxID, void *message, int maxMessageSize) {
+  int boxLocation = locateMailbox(mailboxID);
+
+  // return -1 if the mailbox doesn't exist
+  if (boxLocation == -1) {
+    return -1;
+  }
+
+  // check to see if the mailbox is empty
+  if(MailBoxTable[boxLocation].usedSlots == 0) {
+    return -2;
+  } else {
+    // get something out of the slot if the message buffer can hold it
+
+    // return -1 if the message buffer can't hold the message
+    if(MailBoxTable[boxLocation].slotList->msgSize > maxMessageSize) {
+      return -1;
+    } else {
+      // get the message and release the slot
+      memcpy(message, MailBoxTable[boxLocation].slotList->message, MailBoxTable[boxLocation].slotList->msgSize);
+      // save the size to return it
+      int size = MailBoxTable[boxLocation].slotList->msgSize;
+      // create pointer to the slot
+      slotPtr released_slot = MailBoxTable[boxLocation].slotList;
+      // change status to released
+      released_slot->status = RELEASED;
+      slotsInUse--;
+      // decrement usedSlots
+      MailBoxTable[boxLocation].usedSlots--;
+
+      // move to next on the list
+      MailBoxTable[boxLocation].slotList = MailBoxTable[boxLocation].slotList->nextSlot;
+
+      released_slot->nextSlot = NULL;
+
+      // check if anyone's on the waitingToSend list and wake them up
+      if(MailBoxTable[boxLocation].waitingToSend != NULL) {
+        int pid = MailBoxTable[boxLocation].waitingToSend->pid;
+        // move waitingToSend forward to next pointer
+        MailBoxTable[boxLocation].waitingToSend = MailBoxTable[boxLocation].waitingToSend->nextProcPtr;;
+        unblockProc(pid);  
+      }
+      // return msgSize of old process
+      return size;
+    }
+
+  }
+
+}
 
 /*----------------------------------------------------------------------------------------
 Name: MboxRelease(int mailboxID)
