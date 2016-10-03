@@ -39,7 +39,7 @@ struct mailbox {
     int       status;
 
     // other items as needed...
-    char      message[150];   // the message the slot contains
+    char      message[MAX_MESSAGE];   // the message the slot contains
     int       msgSize;    // the size of the message in the slot
     slotPtr   nextSlot;   // the pointer to the next slot in the mailbox
   };
