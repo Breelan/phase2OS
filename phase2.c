@@ -148,17 +148,13 @@ int MboxCreate(int slots, int slot_size)
 
   // check if there are empty slots in the MailBoxTable, and initialize if so
   int mailboxCreated = findMailBox();
-  // printf("found mailbox #%d\n", mailboxCreated);
 
   // success! you can now create a new mailbox
   if(mailboxCreated != -1) {
-    // save the current id and increment the global
-    // int tempID = nextMailBoxID;
-    // int tempID = 
+
     nextMailBoxID++;
 
     // initialize it here
-    // MailBoxTable[mailboxCreated].mboxID = tempID;
     MailBoxTable[mailboxCreated].mboxID = mailboxCreated;
     MailBoxTable[mailboxCreated].isReleased = NOT_RELEASED;
     MailBoxTable[mailboxCreated].numSlots = slots;
@@ -166,7 +162,6 @@ int MboxCreate(int slots, int slot_size)
     MailBoxTable[mailboxCreated].usedSlots = 0;
 
     enableInterrupts();
-    // return tempID;
     return mailboxCreated;
   }
 
@@ -191,7 +186,7 @@ int MboxCreate(int slots, int slot_size)
    ----------------------------------------------------------------------- */
 int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 {
-  // printf("made it into send\n");
+
   disableInterrupts();
 
   // check for invalid arguments
@@ -479,7 +474,6 @@ int MboxCondSend(int mailboxID, void *message, int messageSize) {
   }
   // Check if mailbox has available slots
   int boxLocation = locateMailbox(mailboxID);
-  // printf("mailbox location is %d\n", boxLocation);
 
   // check if mailbox exists
   if(boxLocation == -1) {
@@ -782,14 +776,14 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 
       // there's nothing waiting yet
       if (MailBoxTable[index].waitingToReceive ==  NULL)  {
-        // printf("should only happen once\n");
+        
         // add a pointer to that place in the procTable to the end of
         // this mailbox's waiting list
         MailBoxTable[index].waitingToReceive = &(ProcTable[procSpot]);
-        // printf("waitingToReceive \n");
+        
       } else {
 
-        // TODO handle the case where multiple things are waiting
+        // TODO handle the case where multiple things are waiting?
         procPtr currentWaiting = MailBoxTable[index].waitingToReceive;
         while (currentWaiting->nextProcPtr != NULL){
           currentWaiting = currentWaiting->nextProcPtr;
@@ -800,7 +794,8 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 
       blockMe(BLOCKRECEIVE);
       disableInterrupts();
-      // printf("message size is %d\n", ProcTable[procSpot].msgSize);
+      
+      // check to see if a message was delivered
       if(ProcTable[procSpot].msgSize == 0) {
         return -1;
       }
@@ -839,13 +834,17 @@ int MboxCondReceive(int mailboxID, void *message, int maxMessageSize) {
 
   // return -1 if the mailbox doesn't exist
   if (boxLocation == -1) {
+    // printf("failing on 1\n");
     return -1;
   }
 
+  // printf("slotSize is %d\n", MailBoxTable[boxLocation].slotSize);
+
   // check for invalid arguments
-  if(MailBoxTable[boxLocation].slotSize > maxMessageSize) {
-    return -1;
-  }
+  // if(MailBoxTable[boxLocation].slotSize > maxMessageSize) {
+  //   printf("failing on 2\n");
+  //   return -1;
+  // }
 
   // check to see if the mailbox is empty
   if(MailBoxTable[boxLocation].usedSlots == 0) {
@@ -855,6 +854,7 @@ int MboxCondReceive(int mailboxID, void *message, int maxMessageSize) {
 
     // return -1 if the message buffer can't hold the message
     if(MailBoxTable[boxLocation].slotList->msgSize > maxMessageSize) {
+      // printf("failing on 3\n");
       return -1;
     } else {
       // get the message and release the slot
@@ -915,7 +915,6 @@ Return values:
 int MboxRelease(int mailboxID){
   disableInterrupts();
 
-  // printf("%d\n", mailboxID);
   int mBoxIndex = locateMailbox(mailboxID);
 
   // Find the mailbox
@@ -1045,12 +1044,10 @@ int check_io() {
   for(m = 0; m < MAXMBOX; m++) {
     if(MailBoxTable[m].mboxID != -1) {
       if(MailBoxTable[m].waitingToSend != NULL) {
-        // printf("someone waiting to waitSend\n");
         enableInterrupts();
         return 1;
       }
       if(MailBoxTable[m].waitingToReceive != NULL) {
-        // printf("someone waiting to receive\n");
         enableInterrupts();
         return 1;
       }
