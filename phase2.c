@@ -136,7 +136,13 @@ int MboxCreate(int slots, int slot_size)
 {
   disableInterrupts();
 
-  if(slot_size > 150) {
+  // check slot_size
+  if(slot_size > 150 || slot_size < 0) {
+    return -1;
+  }
+
+  // check slots
+  if(slots < 0) {
     return -1;
   }
 
@@ -407,11 +413,31 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
   // waiting list, and wake it up - unblockproc?
   else {
     
-    // get the waiting process and copy the message
-    memcpy(MailBoxTable[boxLocation].waitingToReceive->message, msg_ptr, msg_size);
+    // check that waiting process has big enough buffer size to hold the message
+    if(MailBoxTable[boxLocation].waitingToReceive->msgSize < msg_size) {
+      // indicate that the message was not received
+      MailBoxTable[boxLocation].waitingToReceive->msgSize = 0;
 
-    // update the message size for the waiting process
-    MailBoxTable[boxLocation].waitingToReceive->msgSize = msg_size;
+      int pid = MailBoxTable[boxLocation].waitingToReceive->pid;
+
+      // move the waitingToReceive pointer forward
+      MailBoxTable[boxLocation].waitingToReceive = MailBoxTable[boxLocation].waitingToReceive->nextProcPtr;
+
+      // unblock the process
+      unblockProc(pid);
+      return -1;
+    }
+
+    // otherwise, copy the message over
+    else{
+      // get the waiting process and copy the message
+      memcpy(MailBoxTable[boxLocation].waitingToReceive->message, msg_ptr, msg_size);
+
+      // update the message size for the waiting process
+      MailBoxTable[boxLocation].waitingToReceive->msgSize = msg_size;
+      
+    }
+    
     int pid = MailBoxTable[boxLocation].waitingToReceive->pid;
 
     // move the waitingToReceive pointer forward
@@ -419,6 +445,8 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 
     // unblock the process
     unblockProc(pid);
+
+    // return 0 only if you delivered the message
     return 0;
   }
 
@@ -576,7 +604,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
       else {
         // copy the message into the receiver's buffer
         // memcpy(msg_ptr, MailBoxTable[index].slotList->message, msg_size);
-
         memcpy(msg_ptr, MailBoxTable[index].slotList->message, MailBoxTable[index].slotList->msgSize);
         // save the size to return it
         size = MailBoxTable[index].slotList->msgSize;
@@ -773,7 +800,10 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 
       blockMe(BLOCKRECEIVE);
       disableInterrupts();
-      // printf("message is %s\n", (char *)msg_ptr);
+      // printf("message size is %d\n", ProcTable[procSpot].msgSize);
+      if(ProcTable[procSpot].msgSize == 0) {
+        return -1;
+      }
 
       // CHECK for ZAPPED
       if (ProcTable[procSpot].status == ZAPPED){
