@@ -31,6 +31,7 @@ int locateMailbox(int);
 int MboxRelease(int);
 int MboxCondSend(int, void *, int);
 int MboxCondReceive(int, void *, int);
+void clockHandler();
 
 
 /* -------------------------- Globals ------------------------------------- */
@@ -80,6 +81,9 @@ int start1(char *arg)
 
     // Disable interrupts
     disableInterrupts();
+
+    // Initialize the clock interrupt handler
+    USLOSS_IntVec[USLOSS_CLOCK_INT] = clockHandler;
 
     // Initialize the mail box table, slots, & other data structures.
     // set things in mailbox
@@ -194,7 +198,6 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 
     // is not a 0 slot mailbox
     if(MailBoxTable[boxLocation].numSlots != 0) {
-
       // add sender to phase2 proc table
       // add pid, message ptr, msg size
       int procSpot = getpid();
@@ -217,8 +220,17 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         end->nextProcPtr = &(ProcTable[procSpot]);
       }      
 
+      // print out waitingToSend
+      // procPtr print = MailBoxTable[boxLocation].waitingToSend;
+      // while(print->nextProcPtr != NULL) {
+      //   printf("message in waitingToSend is %s\n", (char *)print->message);
+      //   print = print->nextProcPtr;
+      // }
+      // printf("message in waitingToSend is %s\n", (char *)print->message);
+      // printf("%s about to block\n", (char *)msg_ptr);
       // block the process
       blockMe(BLOCKSEND);
+      // printf("%s woke up from blocksend\n", (char *)msg_ptr);
       
       // when it wakes up, disable interrupts and check it it's been zapped
       disableInterrupts();
@@ -267,19 +279,33 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
           // add a pointer to that place in the procTable to the end of
           // this mailbox's waiting list
           MailBoxTable[boxLocation].waitingToSend = &(ProcTable[procSpot]);
-          
           blockMe(BLOCKSEND);
-          // TODO when you wake up, it will be because a receiver blocked and woke you
-          // TODO copy message to receiver and unblock it
-
           disableInterrupts();
+          // if woken by receiver, give them the message
+          if(MailBoxTable[boxLocation].waitingToSend->wokenByReceiver == 1) {
+          // TODO when you wake up, it will be because a receiver blocked and 
+          // woke you
+          // TODO copy message to receiver and unblock it
+            memcpy(MailBoxTable[boxLocation].waitingToReceive->message, msg_ptr, msg_size);
+
+            // update the message size for the waiting process
+            MailBoxTable[boxLocation].waitingToReceive->msgSize = msg_size;
+
+            // remove sender and receiver from waiting list
+            MailBoxTable[boxLocation].waitingToReceive = MailBoxTable[boxLocation].waitingToReceive->nextProcPtr;
+            MailBoxTable[boxLocation].waitingToSend = MailBoxTable[boxLocation].waitingToSend->nextProcPtr;
+          }
+
+
+          
           // CHECK for ZAPPED
           if (ProcTable[procSpot].status == ZAPPED){
             enableInterrupts();
             return -3;
           }
-          enableInterrupts();
 
+          enableInterrupts();
+          return 0;
         } else {
           // get to the end of the waitingToSend and add a process
           procPtr end = MailBoxTable[boxLocation].waitingToSend;
@@ -295,11 +321,24 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 
           end->nextProcPtr = &(ProcTable[procSpot]);
           blockMe(BLOCKSEND);
-
-          // TODO when you wake up, it will be because a receiver blocked and woke you
-          // TODO copy message to receiver and unblock it
-          
           disableInterrupts();
+
+          
+          if(MailBoxTable[boxLocation].waitingToSend->wokenByReceiver == 1) {
+            // when you wake up, it will be because a receiver blocked and woke you
+            // copy message to receiver and unblock it
+
+            memcpy(MailBoxTable[boxLocation].waitingToReceive->message, msg_ptr, msg_size);
+
+            // update the message size for the waiting process
+            MailBoxTable[boxLocation].waitingToReceive->msgSize = msg_size;
+
+            // remove processes from the waiting lists
+            MailBoxTable[boxLocation].waitingToReceive = MailBoxTable[boxLocation].waitingToReceive->nextProcPtr;
+            MailBoxTable[boxLocation].waitingToSend = MailBoxTable[boxLocation].waitingToSend->nextProcPtr;
+          }
+          
+          
           // CHECK for ZAPPED
           if (ProcTable[procSpot].status == ZAPPED){
             enableInterrupts();
@@ -369,6 +408,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
   // otherwise, copy message directly to waiting process and remove it from
   // waiting list, and wake it up - unblockproc?
   else {
+    
     // get the waiting process and copy the message
     memcpy(MailBoxTable[boxLocation].waitingToReceive->message, msg_ptr, msg_size);
 
@@ -376,8 +416,8 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     MailBoxTable[boxLocation].waitingToReceive->msgSize = msg_size;
     int pid = MailBoxTable[boxLocation].waitingToReceive->pid;
 
-    // TODO move the waitingToReceive pointer forward
-    // MailBoxTable[boxLocation].waitingToReceive = MailBoxTable[boxLocation].waitingToReceive->nextProcPtr;
+    // TODO move the waitingToReceive pointer forward?
+    MailBoxTable[boxLocation].waitingToReceive = MailBoxTable[boxLocation].waitingToReceive->nextProcPtr;
 
     // unblock the process
     unblockProc(pid);
@@ -491,7 +531,7 @@ int MboxCondSend(int mailboxID, void *message, int messageSize) {
       MailBoxTable[boxLocation].waitingToReceive->msgSize = messageSize;
       int pid = MailBoxTable[boxLocation].waitingToReceive->pid;
 
-      // TODO move the waitingToReceive pointer forward
+      // TODO move the waitingToReceive pointer forward?
       // MailBoxTable[boxLocation].waitingToReceive = MailBoxTable[boxLocation].waitingToReceive->nextProcPtr;
 
       // unblock the process
@@ -531,14 +571,8 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
     // proceed if there's a message in the mailbox to receive
     if(MailBoxTable[index].usedSlots >= 1) {
       // get the first slot available
-      slotPtr slot = MailBoxTable[index].slotList;
-      
-      if (slot == NULL){
-        printf("%s\n", "============= SLOT IS NULL =================");
-      }
 
       // check if current process can fit the message in its buffer
-      // if(msg_size < slot->msgSize) {
       if(msg_size < MailBoxTable[index].slotList->msgSize) {
         return -1;
       }
@@ -572,10 +606,65 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         // return msgSize of old process
         return size;
       }
-    }
+    } 
+    /*********** 0 SLOT MAILBOX ********************/
+    // check if it's a 0-slot mailbox
+    else if (MailBoxTable[index].numSlots == 0) {
+      // check if there are processes waiting to send
+      if(MailBoxTable[index].waitingToSend != NULL) {
 
-    // otherwise the receiver must block and wait for a message
-    else {
+        // add receiver to phase2 proc table
+        // add pid, buffer ptr, msg size
+        int procSpot = getpid();
+
+        ProcTable[procSpot].pid = procSpot;
+        ProcTable[procSpot].message = msg_ptr;
+        ProcTable[procSpot].msgSize = msg_size;
+        ProcTable[procSpot].status = BLOCKRECEIVE;
+
+        // there's nothing waiting yet
+        if (MailBoxTable[index].waitingToReceive ==  NULL)  {
+
+          // add a pointer to that place in the procTable to the end of
+          // this mailbox's waiting list
+          MailBoxTable[index].waitingToReceive = &(ProcTable[procSpot]);
+
+        } 
+
+        else {
+
+          // TODO handle the case where multiple things are waiting
+          procPtr currentWaiting = MailBoxTable[index].waitingToReceive;
+          while (currentWaiting->nextProcPtr != NULL){
+            currentWaiting = currentWaiting->nextProcPtr;
+          }
+
+          currentWaiting->nextProcPtr = &(ProcTable[procSpot]);
+        }
+
+        // update sender
+        MailBoxTable[index].waitingToSend->wokenByReceiver = 1;
+
+        // unblock sender
+        unblockProc(MailBoxTable[index].waitingToSend->pid);
+
+        // block current process
+        // printf("about to block self\n");
+        // blockMe(BLOCKRECEIVE);
+        // printf("after blockme\n");
+
+        disableInterrupts();
+        // CHECK for ZAPPED
+        if (ProcTable[procSpot].status == ZAPPED){
+          enableInterrupts();
+          return -3;
+        }
+        enableInterrupts();
+        return ProcTable[procSpot].msgSize;
+      }
+
+      // otherwise block and wait for a sender
+      else {
       // add receiver to end of mailbox's waitingToReceive
 
       // add receiver to phase2 proc table
@@ -594,19 +683,77 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         // this mailbox's waiting list
         MailBoxTable[index].waitingToReceive = &(ProcTable[procSpot]);
 
-      } else {
+      } 
 
-      // TODO handle the case where multiple things are waiting
-      procPtr currentWaiting = MailBoxTable[index].waitingToReceive;
-      while (currentWaiting->nextProcPtr != NULL){
-        currentWaiting = currentWaiting->nextProcPtr;
+      else {
+        // TODO handle the case where multiple things are waiting
+        procPtr currentWaiting = MailBoxTable[index].waitingToReceive;
+        while (currentWaiting->nextProcPtr != NULL){
+          currentWaiting = currentWaiting->nextProcPtr;
+        }
+
+        currentWaiting->nextProcPtr = &(ProcTable[procSpot]);
       }
 
-      currentWaiting->nextProcPtr = &(ProcTable[procSpot]);
-    }
-      blockMe(BLOCKRECEIVE);
+        blockMe(BLOCKRECEIVE);
+        disableInterrupts();
 
+        // remove self from waitingToReceive
+        MailBoxTable[index].waitingToReceive = MailBoxTable[index].waitingToReceive->nextProcPtr;
+
+        // CHECK for ZAPPED
+        if (ProcTable[procSpot].status == ZAPPED){
+          enableInterrupts();
+          return -3;
+        }
+        enableInterrupts();
+        return ProcTable[procSpot].msgSize;
+      }
+    }
+
+    // otherwise the receiver must block and wait for a message
+    else {
+      // add receiver to end of mailbox's waitingToReceive
+
+      // add receiver to phase2 proc table
+      // add pid, buffer ptr, msg size
+      int procSpot = getpid();
+
+      ProcTable[procSpot].pid = procSpot;
+      ProcTable[procSpot].message = msg_ptr;
+      ProcTable[procSpot].msgSize = msg_size;
+      ProcTable[procSpot].status = BLOCKRECEIVE;
+
+      // there's nothing waiting yet
+      if (MailBoxTable[index].waitingToReceive ==  NULL)  {
+        // printf("should only happen once\n");
+        // add a pointer to that place in the procTable to the end of
+        // this mailbox's waiting list
+        MailBoxTable[index].waitingToReceive = &(ProcTable[procSpot]);
+        // printf("waitingToReceive \n");
+      } else {
+
+        // TODO handle the case where multiple things are waiting
+        procPtr currentWaiting = MailBoxTable[index].waitingToReceive;
+        while (currentWaiting->nextProcPtr != NULL){
+          currentWaiting = currentWaiting->nextProcPtr;
+        }
+
+        currentWaiting->nextProcPtr = &(ProcTable[procSpot]);
+      }
+
+      // print out waitingToReceive
+      // procPtr print = MailBoxTable[index].waitingToReceive;
+      // while(print->nextProcPtr != NULL) {
+      //   printf("pid in waitingToReceive is %d\n", print->pid);
+      //   print = print->nextProcPtr;
+      // }
+      // printf("pid in waitingToReceive is %d\n", print->pid);
+
+      blockMe(BLOCKRECEIVE);
       disableInterrupts();
+      // printf("message is %s\n", (char *)msg_ptr);
+
       // CHECK for ZAPPED
       if (ProcTable[procSpot].status == ZAPPED){
         enableInterrupts();
@@ -617,6 +764,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
     }
 
   }
+
   else {
     // if process is looking for a mailbox that doesn't exist, that is an error
     enableInterrupts();
@@ -839,6 +987,23 @@ Name - check_io()
 Purpose - 
 ----------------------------------------------------------*/
 int check_io() {
+  disableInterrupts();
+  // TODO go through and check to see if anything is blocked on a mailbox
+  int m;
+  for(m = 0; m < MAXMBOX; m++) {
+    if(MailBoxTable[m].mboxID != -1) {
+      if(MailBoxTable[m].waitingToSend != NULL) {
+        // printf("someone waiting to waitSend\n");
+        enableInterrupts();
+        return 1;
+      }
+      if(MailBoxTable[m].waitingToReceive != NULL) {
+        // printf("someone waiting to receive\n");
+        enableInterrupts();
+        return 1;
+      }
+    }
+  }
   return 0;
 } /* check_io */
 
@@ -934,4 +1099,11 @@ int locateMailbox(int id) {
     }
   }
   return -1;
+}
+
+void clockHandler() {
+    // if (DEBUG2 && debugflag2)printf("%d totalTime From Clock Handler\n", readtime());
+    // Current->cpu = readtime();
+    // timeSlice();
+  // printf("i think this happens\n");
 }

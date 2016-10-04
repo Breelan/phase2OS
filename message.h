@@ -12,6 +12,7 @@ struct procStruct {
    void            *message;      /* message sender is trying to send */
    int             msgSize;      /* the size of the message sender is trying to send */      
    int             status;       /* the status of the waiting process */
+   int             wokenByReceiver; /* specifically for senders at 0-slot mailbox */
 };
 
 typedef struct mailSlot *slotPtr;
