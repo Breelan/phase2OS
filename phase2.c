@@ -142,22 +142,26 @@ int MboxCreate(int slots, int slot_size)
 
   // check if there are empty slots in the MailBoxTable, and initialize if so
   int mailboxCreated = findMailBox();
+  // printf("found mailbox #%d\n", mailboxCreated);
 
   // success! you can now create a new mailbox
   if(mailboxCreated != -1) {
     // save the current id and increment the global
-    int tempID = nextMailBoxID;
+    // int tempID = nextMailBoxID;
+    // int tempID = 
     nextMailBoxID++;
 
     // initialize it here
-    MailBoxTable[mailboxCreated].mboxID = tempID;
+    // MailBoxTable[mailboxCreated].mboxID = tempID;
+    MailBoxTable[mailboxCreated].mboxID = mailboxCreated;
     MailBoxTable[mailboxCreated].isReleased = NOT_RELEASED;
     MailBoxTable[mailboxCreated].numSlots = slots;
     MailBoxTable[mailboxCreated].slotSize = slot_size;
     MailBoxTable[mailboxCreated].usedSlots = 0;
 
     enableInterrupts();
-    return tempID;
+    // return tempID;
+    return mailboxCreated;
   }
 
   else {
@@ -881,6 +885,7 @@ Return values:
 int MboxRelease(int mailboxID){
   disableInterrupts();
 
+  // printf("%d\n", mailboxID);
   int mBoxIndex = locateMailbox(mailboxID);
 
   // Find the mailbox
