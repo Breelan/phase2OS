@@ -9,10 +9,11 @@ typedef struct procStruct * procPtr;
 struct procStruct {
    procPtr         nextProcPtr;
    short           pid;               /* process id */
-   void            *message;      /* message sender is trying to send */
+   void           *message;      /* message sender is trying to send */
    int             msgSize;      /* the size of the message sender is trying to send */      
    int             status;       /* the status of the waiting process */
    int             wokenByReceiver; /* specifically for senders at 0-slot mailbox */
+   int             messageDelivered; /* the receiver delivered a waiting sender's message */
 };
 
 typedef struct mailSlot *slotPtr;
